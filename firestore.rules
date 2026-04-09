@@ -1,0 +1,75 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - uid: string (required) - Firebase Auth UID
+    //   - email: string (required, email) - User email
+    //   - createdAt: timestamp (required) - Creation date
+    //
+    // Collection: projects
+    // Document ID: {projectId}
+    // Fields:
+    //   - id: string (required) - Project ID
+    //   - ownerUid: string (required) - Owner UID
+    //   - name: string (required) - Project name
+    //   - description: string (optional) - Project description
+    //   - code: string (optional) - Project code
+    //   - createdAt: timestamp (required) - Creation date
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner(ownerUid) {
+      return isAuthenticated() && request.auth.uid == ownerUid;
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'createdAt']) &&
+             data.uid is string &&
+             data.email is string &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidProject(data) {
+      return data.keys().hasAll(['id', 'ownerUid', 'name', 'createdAt']) &&
+             data.id is string &&
+             data.ownerUid is string &&
+             data.name is string &&
+             data.createdAt is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data);
+    }
+
+    match /projects/{projectId} {
+      allow read: if isDocOwner(resource.data.ownerUid);
+      allow create: if isDocOwner(request.resource.data.ownerUid) && isValidProject(request.resource.data);
+      allow update: if isDocOwner(resource.data.ownerUid) && isDocOwner(request.resource.data.ownerUid) && isValidProject(request.resource.data);
+      allow delete: if isDocOwner(resource.data.ownerUid);
+    }
+  }
+}
